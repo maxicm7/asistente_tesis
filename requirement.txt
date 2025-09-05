@@ -4,6 +4,6 @@ langchain-google-genai
 google-generativeai
 langchain-community
 langchain-huggingface
-python-dotenv 
 pypdf
 tavily-python
+dotenv
