@@ -4,9 +4,10 @@
 import streamlit as st
 import os
 import google.generativeai as genai
-import nest_asyncio  # <--- NUEVA LÍNEA: Importar la librería mágica.
+import nest_asyncio
+import asyncio  # <--- NUEVO: Importamos asyncio para manejar llamadas asíncronas
 
-# <--- NUEVA LÍNEA: Aplicar el parche al inicio del script. ¡ESTO RESUELVE EL RUNTIMEERROR!
+# Aplicar el parche para resolver conflictos de bucles de eventos asíncronos
 nest_asyncio.apply()
 
 # --- Importaciones de LangChain ---
@@ -18,7 +19,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEndpoint
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
-from langchain import hub # Para el agente ReAct
+from langchain import hub
 
 # ==============================================================================
 # 2. CARGA DE SECRETS Y VARIABLES DE ENTORNO
@@ -38,7 +39,7 @@ except KeyError as e:
     st.stop()
 
 # ==============================================================================
-# 3. DEFINICIÓN DE HERRAMIENTAS (HABILIDADES DEL AGENTE)
+# 3. DEFINICIÓN DE HERRAMIENTAS
 # ==============================================================================
 
 @tool
@@ -58,7 +59,7 @@ def summarize_paper(pdf_path: str) -> str:
         pages = loader.load_and_split()
         full_text = " ".join([page.page_content for page in pages])
         summarizer_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.2)
-        prompt_template = f"Basado en el siguiente texto de un paper académico, crea un resumen conciso y estructurado (aprox. 300 palabras) enfocándote en: Problema, Metodología, Hallazgos Clave y Conclusiones.\n\nTexto:\n{full_text[:25000]}"
+        prompt_template = f"Basado en el siguiente texto de un paper, crea un resumen conciso (aprox. 300 palabras) enfocándote en: Problema, Metodología, Hallazgos y Conclusiones.\n\nTexto:\n{full_text[:25000]}"
         summary = summarizer_llm.invoke(prompt_template).content
         return summary
     except Exception as e:
@@ -71,7 +72,7 @@ tools = [web_search, summarize_paper]
 # ==============================================================================
 
 tool_calling_prompt = ChatPromptTemplate.from_messages([
-    ("system", "Eres un asistente de investigación de doctorado. Tu misión es ayudar al usuario a avanzar en su tesis. Usa tus herramientas. Responde de forma rigurosa, clara y académica."),
+    ("system", "Eres un asistente de investigación de doctorado. Tu misión es ayudar al usuario a avanzar en su tesis. Usa tus herramientas. Responde de forma rigurosa y académica."),
     ("placeholder", "{chat_history}"),
     ("human", "{input}"),
     ("placeholder", "{agent_scratchpad}"),
@@ -87,7 +88,7 @@ if 'memory' not in st.session_state:
 # ==============================================================================
 
 st.set_page_config(page_title="Asistente de Tesis IA", layout="wide")
-st.title("🤖 Asistente de Tesis IA para Transición Energética")
+st.title("🤖 Asistente de Tesis IA")
 
 with st.sidebar:
     st.header("Configuración")
@@ -108,7 +109,7 @@ with st.sidebar:
         st.session_state.uploaded_file_path = temp_file_path
         st.success(f"Archivo '{uploaded_file.name}' cargado.")
 
-# --- Lógica de Selección de Modelo y Construcción de Agente ---
+# --- Lógica de Selección de Modelo ---
 if model_choice == "Google Gemini-1.5-Flash":
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=temperature, convert_system_message_to_human=True)
     agent = create_tool_calling_agent(llm, tools, tool_calling_prompt)
@@ -126,11 +127,16 @@ agent_executor = AgentExecutor(
 
 # --- Lógica del Chat ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. ¿Cómo puedo ayudarte?"}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. ¿Cómo te ayudo?"}]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+
+# --- NUEVO: Función auxiliar asíncrona para llamar al agente ---
+# Esto nos permite usar `ainvoke` que es asíncrono y compatible con el entorno de Streamlit.
+async def get_agent_response(agent_executor, input_dict):
+    return await agent_executor.ainvoke(input_dict)
 
 if user_prompt := st.chat_input("Pregunta sobre papers, datos, modelos..."):
     st.session_state.messages.append({"role": "user", "content": user_prompt})
@@ -140,10 +146,11 @@ if user_prompt := st.chat_input("Pregunta sobre papers, datos, modelos..."):
     with st.chat_message("assistant"):
         input_for_agent = {"input": user_prompt}
         if 'uploaded_file_path' in st.session_state and st.session_state.uploaded_file_path:
-            input_for_agent["input"] += f"\n\n[Contexto Adicional] El usuario ha subido el archivo: '{st.session_state.uploaded_file_path}'. Usa `summarize_paper` con esa ruta si es relevante."
+            input_for_agent["input"] += f"\n\n[Contexto] El usuario ha subido el archivo: '{st.session_state.uploaded_file_path}'. Usa `summarize_paper` si es relevante."
 
         with st.spinner("Procesando..."):
-            response = agent_executor.invoke(input_for_agent)
+            # --- CAMBIO CLAVE: Usamos la función auxiliar para llamar al agente de forma asíncrona ---
+            response = asyncio.run(get_agent_response(agent_executor, input_for_agent))
             st.markdown(response["output"])
         
     st.session_state.messages.append({"role": "assistant", "content": response["output"]})
