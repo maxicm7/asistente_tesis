@@ -17,17 +17,30 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 from langchain import hub # Para el agente ReAct
 
-# Cargar variables de entorno desde el archivo .env
-load_dotenv()
-
-# Configuración y validación de API Keys
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-# Configuración explícita de la API de Google (mejor práctica)
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+if not GOOGLE_API_KEY:
+    try:
+        from dotenv import load_dotenv
+        print("Variables de entorno no encontradas, intentando cargar desde .env")
+        load_dotenv()
+        # Volver a cargar las variables después de llamar a load_dotenv()
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+        TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+        print("Archivo .env cargado exitosamente.")
+    except ImportError:
+        print("Librería python-dotenv no encontrada, se asume ejecución en la nube.")
+        # No hacemos nada, ya que se espera que las variables estén en el entorno
+        pass
+else:
+    # Si ya existen, las reasignamos para consistencia
+    HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+    print("Variables de entorno encontradas directamente.")
+
+# Resto de las importaciones
+import google.generativeai as genai
 
 # ==============================================================================
 # 2. DEFINICIÓN DE HERRAMIENTAS (HABILIDADES DEL AGENTE)
