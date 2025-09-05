@@ -1,8 +1,9 @@
 streamlit
 langchain
-langchain-google-genai  # <-- ESTA ES LA LÍNEA QUE FALTABA
+langchain-google-genai
+google-generativeai
 langchain-community
 langchain-huggingface
-python-dotenv
+python-dotenv 
 pypdf
 tavily-python
