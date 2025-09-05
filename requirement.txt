@@ -6,7 +6,6 @@ google-generativeai
 langchain-community
 langchain-huggingface
 huggingface-hub
-python-dotenv
 pypdf
 tavily-python
 langchainhub
