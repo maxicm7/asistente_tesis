@@ -16,30 +16,25 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 from langchain import hub # Para el agente ReAct
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+# ##############################################################################
+# Se utiliza st.secrets para leer las claves de API de forma segura desde
+# la configuración de Streamlit Cloud. Este método es el recomendado.
+# ##############################################################################
+try:
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    HUGGINGFACEHUB_API_TOKEN = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+    TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
 
-if not GOOGLE_API_KEY:
-    try:
-        from dotenv import load_dotenv
-        print("Variables de entorno no encontradas, intentando cargar desde .env")
-        load_dotenv()
-        # Volver a cargar las variables después de llamar a load_dotenv()
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-        HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-        TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-        print("Archivo .env cargado exitosamente.")
-    except ImportError:
-        print("Librería python-dotenv no encontrada, se asume ejecución en la nube.")
-        # No hacemos nada, ya que se espera que las variables estén en el entorno
-        pass
-else:
-    # Si ya existen, las reasignamos para consistencia
-    HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-    print("Variables de entorno encontradas directamente.")
+    # Configurar las variables de entorno para que LangChain las detecte automáticamente
+    # Aunque ya las tenemos en variables, muchas librerías buscan directamente en os.environ
+    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+    os.environ["HUGGINGFACEHUB_API_TOKEN"] = HUGGINGFACEHUB_API_TOKEN
+    os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
-# Resto de las importaciones
-import google.generativeai as genai
+except KeyError as e:
+    st.error(f"Error: No se encontró el secreto '{e.args[0]}'.")
+    st.error("Por favor, asegúrate de haber configurado todas las claves (GOOGLE_API_KEY, HUGGINGFACEHUB_API_TOKEN, TAVILY_API_KEY) en los 'Secrets' de tu app en Streamlit Cloud.")
+    st.stop() # Detiene la ejecución si falta alguna clave
 
 # ==============================================================================
 # 2. DEFINICIÓN DE HERRAMIENTAS (HABILIDADES DEL AGENTE)
@@ -49,7 +44,8 @@ import google.generativeai as genai
 def web_search(query: str) -> str:
     """Busca en la web información actualizada, incluyendo fuentes de datos para investigación académica."""
     try:
-        search = TavilySearchAPIWrapper(tavily_api_key=TAVILY_API_KEY)
+        # La clase buscará la API key en las variables de entorno si no se pasa explícitamente
+        search = TavilySearchAPIWrapper()
         return search.run(query)
     except Exception as e:
         return f"Error en la búsqueda web: {e}"
@@ -115,10 +111,7 @@ if 'memory' not in st.session_state:
 st.set_page_config(page_title="Asistente de Tesis IA", layout="wide")
 st.title("🤖 Asistente de Tesis IA para Transición Energética")
 
-# Verificar si todas las claves están presentes antes de continuar
-if not all([GOOGLE_API_KEY, HUGGINGFACEHUB_API_TOKEN, TAVILY_API_KEY]):
-    st.error("Por favor, asegúrate de que todas las claves de API (Google, Hugging Face, Tavily) están en tu archivo .env")
-    st.stop()
+# La verificación de claves ahora está al principio, así que podemos quitarla de aquí.
 
 # --- Barra Lateral para Controles ---
 with st.sidebar:
@@ -139,8 +132,8 @@ with st.sidebar:
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
         
-        # Usar un nombre de archivo único para evitar colisiones
-        temp_file_path = os.path.join(temp_dir, f"uploaded_{uploaded_file.id}.pdf")
+        # Guardamos el archivo temporalmente
+        temp_file_path = os.path.join(temp_dir, uploaded_file.name)
         with open(temp_file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
         
@@ -148,10 +141,14 @@ with st.sidebar:
         st.success(f"Archivo '{uploaded_file.name}' cargado y listo para analizar.")
 
 # --- Lógica de Selección de Modelo y Construcción de Agente ---
-if model_choice == "Google Gemini-1.5-flash":
+# ##############################################################################
+# ### CAMBIO 2: CORRECCIÓN MENOR EN LA LÓGICA DEL MODELO ###
+# Se ajusta la condición para que coincida exactamente con el texto del selectbox.
+# ##############################################################################
+if model_choice == "Google Gemini-1.5-Pro":
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=temperature)
     agent = create_tool_calling_agent(llm, tools, tool_calling_prompt)
-else:
+else: # "Mistral-7B (via Hugging Face)"
     llm = HuggingFaceEndpoint(repo_id="mistralai/Mistral-7B-Instruct-v0.2", temperature=temperature)
     agent = create_react_agent(llm, tools, react_prompt)
 
@@ -194,7 +191,7 @@ if user_prompt := st.chat_input("Pregunta sobre papers, datos, modelos..."):
     st.session_state.messages.append({"role": "assistant", "content": response["output"]})
 
     # Limpiar el archivo después de su uso para la siguiente interacción
-    if 'uploaded_file_path' in st.session_state:
+    if 'uploaded_file_path' in st.session_state and st.session_state.uploaded_file_path:
         if os.path.exists(st.session_state.uploaded_file_path):
             os.remove(st.session_state.uploaded_file_path)
         del st.session_state.uploaded_file_path
