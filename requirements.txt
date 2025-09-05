@@ -4,9 +4,6 @@ langchain-core
 langchain-google-genai
 google-generativeai
 langchain-community
-langchain-huggingface
-huggingface-hub
 pypdf
 tavily-python
 langchainhub
-nest-asyncio
