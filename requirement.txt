@@ -6,4 +6,4 @@ langchain-community
 langchain-huggingface
 pypdf
 tavily-python
-dotenv
+python-dotenv
