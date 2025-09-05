@@ -1,7 +1,3 @@
-# Especificar una versión de Python estable
-python==3.11
-
-# Librerías de la aplicación
 streamlit
 langchain
 langchain-core
