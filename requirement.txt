@@ -1,0 +1,8 @@
+streamlit
+langchain
+langchain-google-genai  # <-- ESTA ES LA LÍNEA QUE FALTABA
+langchain-community
+langchain-huggingface
+python-dotenv
+pypdf
+tavily-python
