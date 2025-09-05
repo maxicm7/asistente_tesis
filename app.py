@@ -146,18 +146,26 @@ with st.sidebar:
 # Se ajusta la condición para que coincida exactamente con el texto del selectbox.
 # ##############################################################################
 if model_choice == "Google Gemini-1.5-Pro":
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=temperature)
+    st.info("Nota: Se usará el modelo 'gemini-1.5-flash' para optimizar la velocidad y la cuota gratuita.")
+    # SOLUCIÓN 1: Usamos gemini-1.5-flash-latest, es más rápido y tiene una cuota más generosa.
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=temperature, convert_system_message_to_human=True)
     agent = create_tool_calling_agent(llm, tools, tool_calling_prompt)
+
 else: # "Mistral-7B (via Hugging Face)"
-    llm = HuggingFaceEndpoint(repo_id="mistralai/Mistral-7B-Instruct-v0.2", temperature=temperature)
+    st.info("Nota: Se usará el modelo 'Mixtral-8x7B' ya que Mistral-7B no está en la capa gratuita de la API.")
+    # SOLUCIÓN 2: Usamos un modelo más potente que SÍ está disponible en la capa gratuita.
+    # El modelo Mixtral es una excelente alternativa.
+    repo_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    llm = HuggingFaceEndpoint(repo_id=repo_id, temperature=temperature)
     agent = create_react_agent(llm, tools, react_prompt)
+
 
 agent_executor = AgentExecutor(
     agent=agent, 
     tools=tools, 
     memory=st.session_state.memory, 
     verbose=True, 
-    handle_parsing_errors=True
+    handle_parsing_errors=True # Muy útil para agentes ReAct
 )
 
 # --- Lógica del Chat ---
