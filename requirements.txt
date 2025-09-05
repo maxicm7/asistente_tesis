@@ -9,3 +9,4 @@ huggingface-hub
 pypdf
 tavily-python
 langchainhub
+nest-asyncio
