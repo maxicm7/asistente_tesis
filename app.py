@@ -1,142 +1,109 @@
-# ==============================================================================
-# 1. IMPORTACIONES Y CONFIGURACIÓN INICIA
-# ==============================================================================
 import streamlit as st
+from huggingface_hub import InferenceClient
 import os
-import google.generativeai as genai
-import asyncio
 
-# --- Importaciones de LangChain ---
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.tools import tool
-from langchain.memory import ConversationBufferMemory
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
+# --- 1. Definición del Rol y Configuración Inicial ---
 
-# ==============================================================================
-# 2. CARGA DE SECRETS Y VARIABLES DE ENTORNO
-# ==============================================================================
-try:
-    # Cargamos la clave desde los secretos de Streamlit
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
-    # Aunque pasemos la clave directamente, es buena práctica tenerla en el entorno
-    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
-    os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
-except KeyError as e:
-    st.error(f"Error: No se encontró el secreto '{e.args[0]}'. Revisa la configuración de tu app.")
-    st.stop()
+# Tu clave de API de Hugging Face
+# Es mejor usar st.secrets para producción, pero para desarrollo local esto funciona.
+# O puedes pedirla en la UI.
+HF_API_KEY = os.environ.get("HF_API_KEY") # O usa st.text_input("Hugging Face API Key", type="password")
 
-# ==============================================================================
-# 3. DEFINICIÓN DE HERRAMIENTAS
-# ==============================================================================
-@tool
-def web_search(query: str) -> str:
-    """Busca en la web información actualizada, papers o documentación de código."""
-    try:
-        return TavilySearchAPIWrapper().run(query)
-    except Exception as e:
-        return f"Error en la búsqueda web: {e}"
+MASTER_PROMPT = """
+[INICIO DE LA DEFINICIÓN DEL ROL]
+**Nombre del Rol:** Investigador Doctoral IA (IDA)
+**Objetivo Principal:** Asistir en la investigación y redacción de una tesis doctoral en el campo de la Economía Aplicada. Tu función es ser un colaborador riguroso, analítico y eficiente.
+**Personalidad:** Eres un asistente de investigación post-doctoral; preciso, metódico y objetivo.
+**Áreas de Especialización:**
+1. **Analista de Literatura Académica:** Resume papers identificando pregunta de investigación, metodología, resultados, contribución y limitaciones.
+2. **Razonador Económico-Matemático:** Explica conceptos, desarrolla derivaciones matemáticas paso a paso e interpreta modelos.
+3. **Generador de Código (Especialista en CODEQwen):** Genera código Python funcional, comentado y con sus dependencias para tareas de análisis de datos.
+**Instrucciones de Interacción:** Identifica la tarea, aplica el formato de salida correcto y prioriza la integridad académica.
+[FIN DE LA DEFINICIÓN DEL ROL]
+"""
 
-@tool
-def summarize_paper(pdf_path: str) -> str:
-    """Carga y resume un artículo de investigación en formato PDF."""
-    try:
-        loader = PyPDFLoader(pdf_path)
-        full_text = " ".join([page.page_content for page in loader.load_and_split()])
-        
-        # --- CAMBIO CLAVE 1 ---
-        # Pasamos la clave directamente al inicializar el modelo de resumen.
-        summarizer_llm = ChatGoogleGenerativeAI(
-            model="gemini-pro", 
-            google_api_key=GOOGLE_API_KEY, 
-            temperature=0.2
-        )
-        
-        prompt_template = f"Resume este texto de un paper (aprox. 300 palabras) enfocándote en: Problema, Metodología, Hallazgos y Conclusiones.\n\nTexto:\n{full_text[:25000]}"
-        return summarizer_llm.invoke(prompt_template).content
-    except Exception as e:
-        return f"Error al procesar el PDF: {e}"
+# --- 2. Interfaz de Streamlit ---
 
-tools = [web_search, summarize_paper]
+st.set_page_config(layout="wide", page_title="Asistente de Tesis Doctoral IA")
 
-# ==============================================================================
-# 4. CONFIGURACIÓN DEL AGENTE Y LA MEMORIA
-# ==============================================================================
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "Eres un asistente de doctorado experto tanto en investigación econométrica como en codificación. Tu misión es ayudar al usuario con su tesis. Usa tus herramientas. Genera código directamente cuando se te pida."),
-    ("placeholder", "{chat_history}"),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
+st.title("🎓 Asistente de Tesis Doctoral IA")
+st.markdown("Una herramienta para potenciar tu investigación doctoral usando IA.")
 
-if 'memory' not in st.session_state:
-    st.session_state.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+# --- Configuración en la barra lateral ---
+st.sidebar.header("Configuración")
+hf_api_key_input = st.sidebar.text_input("Hugging Face API Key", type="password", help="Pega tu clave de API de Hugging Face aquí.")
 
-# ==============================================================================
-# 5. INTERFAZ DE USUARIO Y LÓGICA PRINCIPAL
-# ==============================================================================
-st.set_page_config(page_title="Asistente de Tesis IA", layout="wide")
-st.title("🤖 Asistente de Tesis IA (Estable)")
-st.info("Este asistente utiliza el modelo `gemini-pro` de Google, garantizado para funcionar sin necesidad de aprobaciones.")
-
-with st.sidebar:
-    st.header("Configuración")
-    temperature = st.slider("Temperatura (creatividad):", 0.0, 1.0, 0.4, 0.1)
-    
-    uploaded_file = st.file_uploader("Sube un paper (PDF) para analizar", type="pdf")
-    if uploaded_file:
-        temp_dir = "temp_pdf"
-        if not os.path.exists(temp_dir): os.makedirs(temp_dir)
-        temp_file_path = os.path.join(temp_dir, uploaded_file.name)
-        with open(temp_file_path, "wb") as f: f.write(uploaded_file.getbuffer())
-        st.session_state.uploaded_file_path = temp_file_path
-        st.success(f"Archivo '{uploaded_file.name}' cargado.")
-
-# --- Lógica de Creación del Agente ---
-# --- CAMBIO CLAVE 2 ---
-# Pasamos la clave directamente al inicializar el modelo principal del agente.
-llm = ChatGoogleGenerativeAI(
-    model="gemini-pro",
-    google_api_key=GOOGLE_API_KEY,
-    temperature=temperature,
-    convert_system_message_to_human=True
+# Selección de modelos
+st.sidebar.subheader("Selección de Modelos")
+model_reasoning = st.sidebar.selectbox(
+    "Modelo para Resumen y Razonamiento",
+    ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Llama-2-70b-chat-hf", "google/gemma-7b-it"],
+    help="Modelos grandes son mejores para entender textos complejos."
 )
-agent = create_tool_calling_agent(llm, tools, prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, memory=st.session_state.memory, verbose=True)
+model_coding = st.sidebar.selectbox(
+    "Modelo para Código (CODEQwen)",
+    ["Qwen/CodeQwen1.5-7B-Chat", "codellama/CodeLlama-34b-Instruct-hf"],
+    help="Modelos especializados en código."
+)
 
-# --- Lógica del Chat ---
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. Pídeme que busque papers, resuma documentos o genere código."}]
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]): st.markdown(message["content"])
+# --- 3. Funcionalidad de la App en Pestañas ---
 
-async def get_agent_response(executor, input_dict):
-    return await executor.ainvoke(input_dict)
+tab1, tab2, tab3 = st.tabs(["📄 Resumir Paper", "🧠 Razonamiento Económico/Matemático", "💻 Generar Código"])
 
-if user_prompt := st.chat_input("Busca, resume, o pide código..."):
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
-    with st.chat_message("user"): st.markdown(user_prompt)
+# Función para llamar a la API de Hugging Face
+def get_hf_response(api_key, model, prompt):
+    if not api_key:
+        st.error("Por favor, introduce tu Hugging Face API Key en la barra lateral.")
+        return None
+    try:
+        client = InferenceClient(token=api_key)
+        response = client.text_generation(prompt=prompt, model=model, max_new_tokens=2048)
+        return response
+    except Exception as e:
+        st.error(f"Error al contactar la API de Hugging Face: {e}")
+        return None
 
-    with st.chat_message("assistant"):
-        input_for_agent = {"input": user_prompt}
-        if 'uploaded_file_path' in st.session_state and st.session_state.uploaded_file_path:
-            input_for_agent["input"] += f"\n\n[Contexto] El usuario ha subido el archivo: '{st.session_state.uploaded_file_path}'."
+# Pestaña 1: Resumir Paper
+with tab1:
+    st.header("Analista de Literatura Académica")
+    paper_text = st.text_area("Pega aquí el abstract o el texto completo del paper:", height=300)
+    if st.button("Generar Resumen", key="summarize"):
+        if paper_text:
+            with st.spinner("Analizando el texto y generando resumen..."):
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Realizar un análisis de literatura académica sobre el siguiente texto. Sigue estrictamente el formato de salida para 'Analista de Literatura Académica'.\n\n**Texto a Analizar:**\n```\n{paper_text}\n```\n\n**Análisis Detallado:**"
+                summary = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
+                if summary:
+                    st.markdown(summary)
+        else:
+            st.warning("Por favor, pega el texto de un paper.")
 
-        with st.spinner("Procesando..."):
-            try:
-                response = asyncio.run(get_agent_response(agent_executor, input_for_agent))
-                output = response["output"]
-            except Exception as e:
-                st.error(f"Ha ocurrido un error al contactar con la API de Google. Por favor, inténtalo de nuevo.\n\nDetalles: {e}")
-                output = "No pude procesar tu solicitud."
+# Pestaña 2: Razonamiento
+with tab2:
+    st.header("Razonador Económico-Matemático")
+    question_text = st.text_area("Escribe tu pregunta o el problema a resolver:", height=200)
+    if st.button("Obtener Razonamiento", key="reason"):
+        if question_text:
+            with st.spinner("Procesando la solicitud..."):
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Responder a la siguiente pregunta de razonamiento económico/matemático. Proporciona una explicación clara, lógica y, si es necesario, paso a paso.\n\n**Pregunta:**\n```\n{question_text}\n```\n\n**Respuesta Detallada:**"
+                reasoning = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
+                if reasoning:
+                    st.markdown(reasoning)
+        else:
+            st.warning("Por favor, introduce una pregunta.")
 
-        st.markdown(output)
-    st.session_state.messages.append({"role": "assistant", "content": output})
-
-    if 'uploaded_file_path' in st.session_state and st.session_state.uploaded_file_path:
-        if os.path.exists(st.session_state.uploaded_file_path): os.remove(st.session_state.uploaded_file_path)
-        del st.session_state.uploaded_file_path
+# Pestaña 3: Generar Código
+with tab3:
+    st.header("Generador de Código con CODEQwen")
+    code_description = st.text_area("Describe la tarea de programación que necesitas:", height=200)
+    if st.button("Generar Código", key="code"):
+        if code_description:
+            with st.spinner("Escribiendo el código..."):
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Generar código según la siguiente descripción. Utiliza la especialización 'Generador de Código (Especialista en CODEQwen)' para producir un código claro, comentado y con sus dependencias.\n\n**Descripción de la Tarea:**\n```\n{code_description}\n```\n\n**Código Generado:**"
+                code = get_hf_response(hf_api_key_input, model_coding, final_prompt)
+                if code:
+                    # Los modelos de código a menudo devuelven el código dentro de bloques ```python ... ```
+                    # Podemos intentar extraerlo o simplemente mostrarlo todo.
+                    st.code(code, language='python')
+        else:
+            st.warning("Por favor, describe la tarea de programación.")
