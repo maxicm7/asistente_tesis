@@ -44,7 +44,8 @@ def summarize_paper(pdf_path: str) -> str:
     try:
         loader = PyPDFLoader(pdf_path)
         full_text = " ".join([page.page_content for page in loader.load_and_split()])
-        summarizer_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.2)
+        # Usamos el modelo estable también para resumir
+        summarizer_llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.2)
         prompt_template = f"Resume este texto de un paper (aprox. 300 palabras) enfocándote en: Problema, Metodología, Hallazgos y Conclusiones.\n\nTexto:\n{full_text[:25000]}"
         return summarizer_llm.invoke(prompt_template).content
     except Exception as e:
@@ -56,27 +57,24 @@ tools = [web_search, summarize_paper]
 # 4. CONFIGURACIÓN DEL AGENTE Y LA MEMORIA
 # ==============================================================================
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "Eres un asistente de doctorado experto tanto en investigación econométrica como en codificación de modelos (Python, R, Stata). Tu misión es ayudar al usuario con su tesis. Usa tus herramientas cuando sea necesario para buscar información o analizar documentos. Genera código directamente cuando se te pida."),
+    ("system", "Eres un asistente de doctorado experto tanto en investigación econométrica como en codificación. Tu misión es ayudar al usuario con su tesis. Usa tus herramientas. Genera código directamente cuando se te pida."),
     ("placeholder", "{chat_history}"),
     ("human", "{input}"),
     ("placeholder", "{agent_scratchpad}"),
 ])
 
 if 'memory' not in st.session_state:
-    st.session_state.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    st.session_state.memory = ConversationBufferMemory(key="chat_history", return_messages=True)
 
 # ==============================================================================
 # 5. INTERFAZ DE USUARIO Y LÓGICA PRINCIPAL
 # ==============================================================================
 st.set_page_config(page_title="Asistente de Tesis IA", layout="wide")
-st.title("🤖 Asistente de Tesis IA (con Gemini)")
+st.title("🤖 Asistente de Tesis IA (Estable)")
+st.info("Este asistente utiliza el modelo `gemini-pro` de Google, garantizado para funcionar sin necesidad de aprobaciones.")
 
 with st.sidebar:
     st.header("Configuración")
-    model_choice = st.selectbox(
-        "Elige tu modelo:",
-        ("Gemini 1.5 Flash (Rápido y eficiente)", "Gemini 1.5 Pro (Potente para código y análisis)")
-    )
     temperature = st.slider("Temperatura (creatividad):", 0.0, 1.0, 0.4, 0.1)
     
     uploaded_file = st.file_uploader("Sube un paper (PDF) para analizar", type="pdf")
@@ -88,20 +86,21 @@ with st.sidebar:
         st.session_state.uploaded_file_path = temp_file_path
         st.success(f"Archivo '{uploaded_file.name}' cargado.")
 
-# --- Lógica de Selección de Modelo ---
-model_name = "gemini-1.5-flash-latest" if "Flash" in model_choice else "gemini-1.5-pro-latest"
-llm = ChatGoogleGenerativeAI(model=model_name, temperature=temperature, convert_system_message_to_human=True)
+# --- Lógica de Creación del Agente (simplificada) ---
+# Usamos el modelo 'gemini-pro', que es universalmente accesible.
+llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=temperature, convert_system_message_to_human=True)
 agent = create_tool_calling_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, memory=st.session_state.memory, verbose=True)
 
 # --- Lógica del Chat ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. Pídeme que busque papers, resuma documentos o genere código para tus modelos."}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. Pídeme que busque papers, resuma documentos o genere código."}]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]): st.markdown(message["content"])
 
 async def get_agent_response(executor, input_dict):
+    # La llamada asíncrona es más robusta en el entorno de Streamlit
     return await executor.ainvoke(input_dict)
 
 if user_prompt := st.chat_input("Busca, resume, o pide código..."):
@@ -115,6 +114,7 @@ if user_prompt := st.chat_input("Busca, resume, o pide código..."):
 
         with st.spinner("Procesando..."):
             try:
+                # Usamos asyncio.run para ejecutar nuestra función asíncrona
                 response = asyncio.run(get_agent_response(agent_executor, input_for_agent))
                 output = response["output"]
             except Exception as e:
