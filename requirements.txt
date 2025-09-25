@@ -7,5 +7,5 @@ langchain-community
 pypdf
 tavily-python
 langchainhub
-langchain-huggingface  # <--- Añadir de nuevo
-nest-asyncio           # <--- Mantener por seguridad
+langchain-huggingface
+nest-asyncio
