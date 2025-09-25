@@ -142,11 +142,11 @@ with tab2:
 # ==============================================================================
 with tab3:
     st.header("Asistente de Codificación Experimental (CodeQwen)")
-    st.info("Ahora que tu cuenta está aprobada, este modelo debería funcionar. Si falla, es posible que el modelo específico no esté en la capa gratuita en este momento.")
+    st.success("¡Tu cuenta de Hugging Face ha sido aprobada! Este modelo ahora debería funcionar.")
     try:
         qwen_llm = HuggingFaceEndpoint(repo_id="Qwen/CodeQwen1.5-7B-Chat", temperature=0.1, max_new_tokens=2048)
     except Exception as e:
-        st.error(f"No se pudo inicializar el modelo CodeQwen. Error: {e}")
+        st.error(f"No se pudo inicializar el modelo CodeQwen. Es posible que no esté en la capa gratuita en este momento. Error: {e}")
         qwen_llm = None
     if "qwen_messages" not in st.session_state: st.session_state.qwen_messages = [{"role": "assistant", "content": "¿En qué código necesitas ayuda?"}]
     for msg in st.session_state.qwen_messages: st.chat_message(msg["role"]).markdown(msg["content"])
