@@ -41,7 +41,7 @@ except KeyError as e:
 st.set_page_config(page_title="Asistente de Tesis Dual", layout="wide")
 st.title("🤖 Asistente de Tesis Dual: Investigación y Código")
 
-tab1, tab2 = st.tabs(["Asistente de Investigación (Gemini)", "Asistente de Codificación (CodeQwen)"])
+tab1, tab2 = st.tabs(["Asistente de Investigación (Gemini)", "Asistente de Codificación (StarCoder)"])
 
 # ==============================================================================
 # PESTAÑA 1: ASISTENTE DE INVESTIGACIÓN (GEMINI CON HERRAMIENTAS)
@@ -50,7 +50,6 @@ with tab1:
     st.header("Asistente de Investigación")
     st.write("Usa este asistente para buscar información, analizar documentos PDF y responder preguntas teóricas.")
 
-    # --- Herramientas para el Agente de Investigación ---
     @tool
     def web_search(query: str) -> str:
         """Busca en la web información actualizada."""
@@ -71,10 +70,9 @@ with tab1:
             return summarizer_llm.invoke(prompt_template).content
         except Exception as e: return f"Error al procesar el PDF: {e}"
 
-    # --- Configuración del Agente de Investigación ---
     research_tools = [web_search, summarize_paper]
     research_prompt = ChatPromptTemplate.from_messages([
-        ("system", "Eres un asistente de investigación de doctorado. Usa tus herramientas para responder preguntas. Sé riguroso y académico."),
+        ("system", "Eres un asistente de investigación de doctorado. Usa tus herramientas para responder. Sé riguroso y académico."),
         ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
@@ -86,14 +84,12 @@ with tab1:
     research_agent = create_tool_calling_agent(research_llm, research_tools, research_prompt)
     research_agent_executor = AgentExecutor(agent=research_agent, tools=research_tools, memory=st.session_state.research_memory, verbose=True)
 
-    # --- Lógica del Chat de Investigación ---
     if "research_messages" not in st.session_state:
         st.session_state.research_messages = [{"role": "assistant", "content": "Hola, ¿en qué tema de tu investigación necesitas ayuda?"}]
 
     for message in st.session_state.research_messages:
         with st.chat_message(message["role"]): st.markdown(message["content"])
 
-    # Widget para subir PDF en la barra lateral
     with st.sidebar:
         st.header("Herramientas de Investigación")
         uploaded_file = st.file_uploader("Sube un paper (PDF) para analizar", type="pdf")
@@ -123,25 +119,24 @@ with tab1:
             
             st.session_state.research_messages.append({"role": "assistant", "content": response["output"]})
             
-            # Limpiar el archivo después de usarlo
             if 'uploaded_file_path' in st.session_state:
                 if os.path.exists(st.session_state.uploaded_file_path): os.remove(st.session_state.uploaded_file_path)
                 del st.session_state.uploaded_file_path
 
 # ==============================================================================
-# PESTAÑA 2: ASISTENTE DE CODIFICACIÓN (CODEQWEN)
+# PESTAÑA 2: ASISTENTE DE CODIFICACIÓN (STARCODER)
 # ==============================================================================
 with tab2:
     st.header("Asistente de Codificación")
     st.write("Pide ayuda para generar, explicar o depurar código Python para tus modelos econométricos (SVAR, DSGE, etc.).")
 
-    # --- Configuración del LLM de Codificación (Llamada Directa) ---
     try:
-        # Usamos el modelo Chat de CodeQwen1.5 de 7B de parámetros
+        # --- CAMBIO CLAVE ---
+        # Se reemplaza 'CodeQwen1.5' por 'starcoder2-3b', un modelo de código fiable en la capa gratuita.
         code_llm = HuggingFaceEndpoint(
-            repo_id="Qwen/CodeQwen1.5-7B-Chat",
-            temperature=0.1,
-            max_new_tokens=2048,
+            repo_id="bigcode/starcoder2-3b",
+            temperature=0.2,
+            max_new_tokens=1024,
             top_k=50,
             top_p=0.95,
         )
@@ -149,7 +144,6 @@ with tab2:
         st.error(f"No se pudo inicializar el modelo de codificación: {e}")
         code_llm = None
 
-    # --- Lógica del Chat de Codificación ---
     if "code_messages" not in st.session_state:
         st.session_state.code_messages = [{"role": "assistant", "content": "¿En qué código necesitas ayuda para tu tesis?"}]
 
@@ -163,7 +157,7 @@ with tab2:
         with st.chat_message("assistant"):
             if code_llm:
                 with st.spinner("Pensando en el código..."):
-                    # Hacemos una llamada síncrona y directa, que es mucho más estable
+                    # Usamos la llamada síncrona directa, que es la más estable para este caso.
                     response_text = code_llm.invoke(code_prompt_input)
                     st.markdown(response_text)
                 st.session_state.code_messages.append({"role": "assistant", "content": response_text})
