@@ -19,8 +19,10 @@ from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 # 2. CARGA DE SECRETS Y VARIABLES DE ENTORNO
 # ==============================================================================
 try:
+    # Cargamos la clave desde los secretos de Streamlit
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
+    # Aunque pasemos la clave directamente, es buena práctica tenerla en el entorno
     os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
     os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 except KeyError as e:
@@ -44,8 +46,15 @@ def summarize_paper(pdf_path: str) -> str:
     try:
         loader = PyPDFLoader(pdf_path)
         full_text = " ".join([page.page_content for page in loader.load_and_split()])
-        # Usamos Flash para resúmenes rápidos
-        summarizer_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0.2)
+        
+        # --- CAMBIO CLAVE 1 ---
+        # Pasamos la clave directamente al inicializar el modelo de resumen.
+        summarizer_llm = ChatGoogleGenerativeAI(
+            model="gemini-pro", 
+            google_api_key=GOOGLE_API_KEY, 
+            temperature=0.2
+        )
+        
         prompt_template = f"Resume este texto de un paper (aprox. 300 palabras) enfocándote en: Problema, Metodología, Hallazgos y Conclusiones.\n\nTexto:\n{full_text[:25000]}"
         return summarizer_llm.invoke(prompt_template).content
     except Exception as e:
@@ -57,7 +66,7 @@ tools = [web_search, summarize_paper]
 # 4. CONFIGURACIÓN DEL AGENTE Y LA MEMORIA
 # ==============================================================================
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "Eres un asistente de doctorado experto tanto en investigación econométrica como en codificación de modelos (Python, R, Stata). Tu misión es ayudar al usuario con su tesis. Usa tus herramientas cuando sea necesario para buscar información o analizar documentos. Genera código directamente cuando se te pida."),
+    ("system", "Eres un asistente de doctorado experto tanto en investigación econométrica como en codificación. Tu misión es ayudar al usuario con su tesis. Usa tus herramientas. Genera código directamente cuando se te pida."),
     ("placeholder", "{chat_history}"),
     ("human", "{input}"),
     ("placeholder", "{agent_scratchpad}"),
@@ -70,14 +79,11 @@ if 'memory' not in st.session_state:
 # 5. INTERFAZ DE USUARIO Y LÓGICA PRINCIPAL
 # ==============================================================================
 st.set_page_config(page_title="Asistente de Tesis IA", layout="wide")
-st.title("🤖 Asistente de Tesis IA (con Gemini)")
+st.title("🤖 Asistente de Tesis IA (Estable)")
+st.info("Este asistente utiliza el modelo `gemini-pro` de Google, garantizado para funcionar sin necesidad de aprobaciones.")
 
 with st.sidebar:
     st.header("Configuración")
-    model_choice = st.selectbox(
-        "Elige tu modelo:",
-        ("Gemini 1.5 Flash (Rápido y eficiente)", "Gemini 1.5 Pro (Potente para código y análisis)")
-    )
     temperature = st.slider("Temperatura (creatividad):", 0.0, 1.0, 0.4, 0.1)
     
     uploaded_file = st.file_uploader("Sube un paper (PDF) para analizar", type="pdf")
@@ -90,14 +96,20 @@ with st.sidebar:
         st.success(f"Archivo '{uploaded_file.name}' cargado.")
 
 # --- Lógica de Creación del Agente ---
-model_name = "gemini-1.5-flash-latest" if "Flash" in model_choice else "gemini-1.5-pro-latest"
-llm = ChatGoogleGenerativeAI(model=model_name, temperature=temperature, convert_system_message_to_human=True)
+# --- CAMBIO CLAVE 2 ---
+# Pasamos la clave directamente al inicializar el modelo principal del agente.
+llm = ChatGoogleGenerativeAI(
+    model="gemini-pro",
+    google_api_key=GOOGLE_API_KEY,
+    temperature=temperature,
+    convert_system_message_to_human=True
+)
 agent = create_tool_calling_agent(llm, tools, prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, memory=st.session_state.memory, verbose=True)
 
 # --- Lógica del Chat ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. Pídeme que busque papers, resuma documentos o genere código para tus modelos."}]
+    st.session_state.messages = [{"role": "assistant", "content": "Hola, soy tu asistente. Pídeme que busque papers, resuma documentos o genere código."}]
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]): st.markdown(message["content"])
@@ -119,7 +131,7 @@ if user_prompt := st.chat_input("Busca, resume, o pide código..."):
                 response = asyncio.run(get_agent_response(agent_executor, input_for_agent))
                 output = response["output"]
             except Exception as e:
-                st.error(f"Ha ocurrido un error al contactar con la API de Google. Por favor, revisa tus claves o el estado del servicio.\n\nDetalles: {e}")
+                st.error(f"Ha ocurrido un error al contactar con la API de Google. Por favor, inténtalo de nuevo.\n\nDetalles: {e}")
                 output = "No pude procesar tu solicitud."
 
         st.markdown(output)
