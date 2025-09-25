@@ -1,5 +1,5 @@
 # ==============================================================================
-# 1. IMPORTACIONES Y CONFIGURACIÓN INICIAL
+# 1. IMPORTACIONES Y CONFIGURACIÓN INICIA
 # ==============================================================================
 import streamlit as st
 import os
