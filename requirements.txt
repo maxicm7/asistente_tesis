@@ -1,8 +1,16 @@
+# Core de la App
 streamlit
-langchain==0.2.1
-langchain-core==0.2.3
-langchain-google-genai==1.0.5
-google-generativeai==0.5.4
-langchain-community
-pypdf
-tavily-python
+huggingface-hub
+
+# Manejo de datos y análisis
+pandas
+numpy
+scipy
+
+# Visualización de datos
+matplotlib
+seaborn
+plotly
+
+# Procesamiento de PDFs
+pymupdf
