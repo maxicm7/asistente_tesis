@@ -49,14 +49,33 @@ model_coding = st.sidebar.selectbox(
 )
 
 # --- 3. Lógica Principal de la App ---
+# --- VERSIÓN NUEVA Y CORRECTA ---
 def get_hf_response(api_key, model, prompt):
+    """
+    Llama a la API de Hugging Face usando el método moderno chat_completion.
+    """
     if not api_key or not api_key.startswith("hf_"):
         st.error("Por favor, introduce una Hugging Face API Key válida.")
         st.stop()
+
     try:
+        # Inicializar el cliente con la clave
         client = InferenceClient(token=api_key)
-        response = client.text_generation(prompt=prompt, model=model, max_new_tokens=2048)
-        return response
+
+        # Formatear el prompt para la tarea de chat
+        # El "prompt" que construimos es el contenido del mensaje del usuario
+        messages = [{"role": "user", "content": prompt}]
+
+        # Usar el método chat_completion
+        response = client.chat_completion(
+            messages=messages,
+            model=model,
+            max_tokens=2048,
+        )
+
+        # Extraer la respuesta del objeto de chat
+        return response.choices[0].message.content
+
     except Exception as e:
         st.error(f"Error al contactar la API de Hugging Face. Detalles: {e}")
         st.info("Esto puede ocurrir por varias razones:\n"
