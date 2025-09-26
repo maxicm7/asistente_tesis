@@ -39,29 +39,18 @@ st.sidebar.subheader("Selección de Modelos")
 model_reasoning = st.sidebar.selectbox(
     "Modelo para Resumen y Razonamiento",
     ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct", "microsoft/Phi-3-mini-4k-instruct", "google/gemma-7b-it"],
-    help="Modelos de chat que usan el método 'conversational'."
 )
 model_coding = st.sidebar.selectbox(
     "Modelo para Código (CODEQwen)",
     ["Qwen/CodeQwen1.5-7B-Chat", "codellama/CodeLlama-34b-Instruct-hf", "bigcode/starcoder2-15b"],
-    help="Modelos de código que usan el método 'text-generation'."
 )
 
 # --- 3. Lógica Principal de la App ---
-# --- ¡LA FUNCIÓN INTELIGENTE Y DEFINITIVA! ---
-
-# Lista de modelos que sabemos que deben usar el endpoint de CHAT
-CHAT_MODELS = [
-    "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    "meta-llama/Meta-Llama-3-8B-Instruct",
-    "microsoft/Phi-3-mini-4k-instruct",
-    "google/gemma-7b-it"
-]
-
+# --- ¡LA FUNCIÓN UNIVERSAL Y SIMPLIFICADA! ---
 def get_hf_response(api_key, model, prompt):
     """
-    Llama a la API de Hugging Face, eligiendo el método correcto
-    (chat_completion o text_generation) según el modelo.
+    Llama a la API de Hugging Face usando el método universal chat_completion
+    para todos los modelos modernos.
     """
     if not api_key or not api_key.startswith("hf_"):
         st.error("Por favor, introduce una Hugging Face API Key válida.")
@@ -69,22 +58,15 @@ def get_hf_response(api_key, model, prompt):
 
     try:
         client = InferenceClient(token=api_key)
-
-        # Decidir qué método usar
-        if model in CHAT_MODELS:
-            # MÉTODO MODERNO PARA MODELOS DE CHAT
-            messages = [{"role": "user", "content": prompt}]
-            response = client.chat_completion(
-                messages=messages, model=model, max_tokens=2048
-            )
-            return response.choices[0].message.content
-        else:
-            # MÉTODO CLÁSICO PARA OTROS MODELOS (COMO CodeQwen)
-            response = client.text_generation(
-                prompt=prompt, model=model, max_new_tokens=2048
-            )
-            return response
-
+        messages = [{"role": "user", "content": prompt}]
+        
+        response = client.chat_completion(
+            messages=messages,
+            model=model,
+            max_tokens=2048,
+        )
+        return response.choices[0].message.content
+        
     except Exception as e:
         st.error(f"Error al contactar la API de Hugging Face. Detalles: {e}")
         st.info("Esto puede ocurrir por varias razones:\n"
@@ -102,7 +84,7 @@ with tab1:
     paper_text = st.text_area("Pega aquí el abstract o el texto completo del paper:", height=300, key="paper_text")
     if st.button("Generar Resumen", key="summarize"):
         if paper_text:
-            with st.spinner("Analizando el texto y generando resumen..."):
+            with st.spinner("Analizando..."):
                 final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** ...\n\n**Texto a Analizar:**\n```\n{paper_text}\n```\n\n**Análisis Detallado:**"
                 summary = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
                 if summary: st.markdown(summary)
@@ -112,7 +94,7 @@ with tab2:
     question_text = st.text_area("Escribe tu pregunta o el problema a resolver:", height=200, key="question_text")
     if st.button("Obtener Razonamiento", key="reason"):
         if question_text:
-            with st.spinner("Procesando la solicitud..."):
+            with st.spinner("Procesando..."):
                 final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** ...\n\n**Pregunta:**\n```\n{question_text}\n```\n\n**Respuesta Detallada:**"
                 reasoning = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
                 if reasoning: st.markdown(reasoning)
@@ -122,12 +104,17 @@ with tab3:
     code_description = st.text_area("Describe la tarea de programación que necesitas:", height=200, key="code_desc")
     if st.button("Generar Código", key="code"):
         if code_description:
-            with st.spinner("Escribiendo el código..."):
+            with st.spinner("Escribiendo código..."):
                 final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** ...\n\n**Descripción de la Tarea:**\n```\n{code_description}\n```\n\n**Código Generado:**"
                 code = get_hf_response(hf_api_key_input, model_coding, final_prompt)
                 if code:
+                    # Limpiar el output para mostrar solo el bloque de código
                     if "```python" in code:
                         code_block = code.split("```python")[1].split("```")[0]
                         st.code(code_block.strip(), language='python')
-                    else: st.code(code, language='python')
+                    elif "```" in code:
+                        code_block = code.split("```")[1].split("```")[0]
+                        st.code(code_block.strip(), language='python')
+                    else:
+                        st.code(code, language='python')
         else: st.warning("Por favor, describe la tarea de programación.")
