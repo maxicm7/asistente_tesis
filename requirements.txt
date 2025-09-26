@@ -1,16 +1,5 @@
 # Core de la App
 streamlit
-huggingface-hub
+huggingface-hub>=0.20.0
 
-# Manejo de datos y análisis
-pandas
-numpy
-scipy
 
-# Visualización de datos
-matplotlib
-seaborn
-plotly
-
-# Procesamiento de PDFs
-pymupdf
