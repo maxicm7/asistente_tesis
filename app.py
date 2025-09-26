@@ -1,10 +1,7 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
-import os
 
 # --- 1. Definición del Rol y Configuración Inicial ---
-
-# El "Master Prompt" que define la personalidad y capacidades de la IA.
 MASTER_PROMPT = """
 [INICIO DE LA DEFINICIÓN DEL ROL]
 **Nombre del Rol:** Investigador Doctoral IA (IDA)
@@ -19,70 +16,48 @@ MASTER_PROMPT = """
 """
 
 # --- 2. Interfaz de Streamlit ---
-
 st.set_page_config(layout="wide", page_title="Asistente de Tesis Doctoral IA")
-
 st.title("🎓 Asistente de Tesis Doctoral IA")
 st.markdown("Una herramienta para potenciar tu investigación doctoral usando IA.")
 
 # --- Configuración en la barra lateral ---
 st.sidebar.header("Configuración")
-# El input para la API Key es la única fuente de autenticación que la app usa.
+
+# --- MEJORA FINAL: Manejo de API Key para local y deploy ---
+try:
+    HF_API_KEY_FROM_SECRETS = st.secrets["HF_API_KEY"]
+except (FileNotFoundError, KeyError):
+    HF_API_KEY_FROM_SECRETS = ""
+
 hf_api_key_input = st.sidebar.text_input(
     "Hugging Face API Key", 
     type="password", 
-    help="Pega tu clave de API de Hugging Face aquí. La puedes encontrar en tus settings de HF."
+    value=HF_API_KEY_FROM_SECRETS,
+    help="Pega tu clave aquí si corres la app localmente. En la nube, se configura vía st.secrets."
 )
 
-# --- MEJORA: Lista de modelos actualizada y más robusta ---
 st.sidebar.subheader("Selección de Modelos")
 model_reasoning = st.sidebar.selectbox(
     "Modelo para Resumen y Razonamiento",
-    [
-        "mistralai/Mixtral-8x7B-Instruct-v0.1",   # Abierto, potente y fiable (Recomendado)
-        "meta-llama/Meta-Llama-3-8B-Instruct",   # Requiere acceso, excelente rendimiento
-        "microsoft/Phi-3-mini-4k-instruct",    # Requiere acceso, muy bueno y rápido
-        "google/gemma-7b-it"                       # Requiere acceso
-    ],
+    ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct", "microsoft/Phi-3-mini-4k-instruct", "google/gemma-7b-it"],
     help="Mixtral es una gran opción que no requiere registro. Para los otros, asegúrate de haber aceptado los términos en su página de Hugging Face."
 )
-
 model_coding = st.sidebar.selectbox(
     "Modelo para Código (CODEQwen)",
-    [
-        "Qwen/CodeQwen1.5-7B-Chat",              # Abierto, tu elección original (Excelente)
-        "codellama/CodeLlama-34b-Instruct-hf",   # Requiere acceso, estándar de la industria
-        "bigcode/starcoder2-15b"                 # Abierto, gran alternativa
-    ],
+    ["Qwen/CodeQwen1.5-7B-Chat", "codellama/CodeLlama-34b-Instruct-hf", "bigcode/starcoder2-15b"],
     help="CodeQwen es una excelente opción abierta."
 )
 
-
 # --- 3. Lógica Principal de la App ---
-
-# --- MEJORA: Función de llamada a la API con mejor manejo de errores ---
 def get_hf_response(api_key, model, prompt):
-    """
-    Llama a la API de Hugging Face y maneja los errores de forma explícita.
-    """
-    # Verificación explícita de la clave ANTES de intentar la conexión.
     if not api_key or not api_key.startswith("hf_"):
-        st.error("Por favor, introduce una Hugging Face API Key válida en la barra lateral.")
-        st.stop() # Detiene la ejecución para no continuar con una clave inválida
-
+        st.error("Por favor, introduce una Hugging Face API Key válida.")
+        st.stop()
     try:
-        # Inicializar el cliente con la clave proporcionada
         client = InferenceClient(token=api_key)
-        
-        # Llamada a la API
-        response = client.text_generation(
-            prompt=prompt, 
-            model=model, 
-            max_new_tokens=2048,
-        )
+        response = client.text_generation(prompt=prompt, model=model, max_new_tokens=2048)
         return response
     except Exception as e:
-        # Mensaje de error más específico para ayudar al usuario a diagnosticar
         st.error(f"Error al contactar la API de Hugging Face. Detalles: {e}")
         st.info("Esto puede ocurrir por varias razones:\n"
                 "1. No tienes acceso a este modelo (visita su página en HF para solicitarlo).\n"
@@ -90,9 +65,8 @@ def get_hf_response(api_key, model, prompt):
                 "3. La API Key es incorrecta o no tiene los permisos necesarios.")
         return None
 
-# Definición de las pestañas
 tab1, tab2, tab3 = st.tabs(["📄 Resumir Paper", "🧠 Razonamiento Económico/Matemático", "💻 Generar Código"])
-
+# ... (El resto del código para las pestañas es idéntico y no necesita cambios)
 # Pestaña 1: Resumir Paper
 with tab1:
     st.header("Analista de Literatura Académica")
