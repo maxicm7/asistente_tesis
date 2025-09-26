@@ -23,7 +23,7 @@ st.markdown("Una herramienta para potenciar tu investigación doctoral usando IA
 # --- Configuración en la barra lateral ---
 st.sidebar.header("Configuración")
 
-# --- MEJORA FINAL: Manejo de API Key para local y deploy ---
+# Manejo de API Key para local y deploy
 try:
     HF_API_KEY_FROM_SECRETS = st.secrets["HF_API_KEY"]
 except (FileNotFoundError, KeyError):
@@ -49,33 +49,27 @@ model_coding = st.sidebar.selectbox(
 )
 
 # --- 3. Lógica Principal de la App ---
-# --- VERSIÓN NUEVA Y CORRECTA ---
+# --- ¡LA FUNCIÓN CORREGIDA Y CENTRALIZADA! ---
 def get_hf_response(api_key, model, prompt):
     """
     Llama a la API de Hugging Face usando el método moderno chat_completion.
+    Esta función es usada por TODAS las pestañas.
     """
     if not api_key or not api_key.startswith("hf_"):
         st.error("Por favor, introduce una Hugging Face API Key válida.")
         st.stop()
 
     try:
-        # Inicializar el cliente con la clave
         client = InferenceClient(token=api_key)
-
-        # Formatear el prompt para la tarea de chat
-        # El "prompt" que construimos es el contenido del mensaje del usuario
         messages = [{"role": "user", "content": prompt}]
-
-        # Usar el método chat_completion
+        
         response = client.chat_completion(
             messages=messages,
             model=model,
             max_tokens=2048,
         )
-
-        # Extraer la respuesta del objeto de chat
         return response.choices[0].message.content
-
+        
     except Exception as e:
         st.error(f"Error al contactar la API de Hugging Face. Detalles: {e}")
         st.info("Esto puede ocurrir por varias razones:\n"
@@ -84,8 +78,10 @@ def get_hf_response(api_key, model, prompt):
                 "3. La API Key es incorrecta o no tiene los permisos necesarios.")
         return None
 
+# Definición de las pestañas
 tab1, tab2, tab3 = st.tabs(["📄 Resumir Paper", "🧠 Razonamiento Económico/Matemático", "💻 Generar Código"])
-# ... (El resto del código para las pestañas es idéntico y no necesita cambios)
+
+# --- PESTAÑAS (NO NECESITAN CAMBIOS PORQUE USAN LA FUNCIÓN CENTRAL) ---
 # Pestaña 1: Resumir Paper
 with tab1:
     st.header("Analista de Literatura Académica")
@@ -93,7 +89,7 @@ with tab1:
     if st.button("Generar Resumen", key="summarize"):
         if paper_text:
             with st.spinner("Analizando el texto y generando resumen..."):
-                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Realizar un análisis de literatura académica sobre el siguiente texto. Sigue estrictamente el formato de salida para 'Analista de Literatura Académica'.\n\n**Texto a Analizar:**\n```\n{paper_text}\n```\n\n**Análisis Detallado:**"
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Realizar un análisis de literatura académica sobre el siguiente texto...\n\n**Texto a Analizar:**\n```\n{paper_text}\n```\n\n**Análisis Detallado:**"
                 summary = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
                 if summary:
                     st.markdown(summary)
@@ -107,7 +103,7 @@ with tab2:
     if st.button("Obtener Razonamiento", key="reason"):
         if question_text:
             with st.spinner("Procesando la solicitud..."):
-                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Responder a la siguiente pregunta de razonamiento económico/matemático. Proporciona una explicación clara, lógica y, si es necesario, paso a paso.\n\n**Pregunta:**\n```\n{question_text}\n```\n\n**Respuesta Detallada:**"
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Responder a la siguiente pregunta de razonamiento económico/matemático...\n\n**Pregunta:**\n```\n{question_text}\n```\n\n**Respuesta Detallada:**"
                 reasoning = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
                 if reasoning:
                     st.markdown(reasoning)
@@ -121,9 +117,15 @@ with tab3:
     if st.button("Generar Código", key="code"):
         if code_description:
             with st.spinner("Escribiendo el código..."):
-                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Generar código según la siguiente descripción. Utiliza la especialización 'Generador de Código (Especialista en CODEQwen)' para producir un código claro, comentado y con sus dependencias.\n\n**Descripción de la Tarea:**\n```\n{code_description}\n```\n\n**Código Generado:**"
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Generar código según la siguiente descripción...\n\n**Descripción de la Tarea:**\n```\n{code_description}\n```\n\n**Código Generado:**"
                 code = get_hf_response(hf_api_key_input, model_coding, final_prompt)
                 if code:
-                    st.code(code, language='python')
+                    # Los modelos a menudo devuelven el código dentro de bloques ```python ... ```
+                    # Extraer el código de los bloques para una mejor visualización
+                    if "```python" in code:
+                        code_block = code.split("```python")[1].split("```")[0]
+                        st.code(code_block, language='python')
+                    else:
+                        st.code(code, language='python')
         else:
             st.warning("Por favor, describe la tarea de programación.")
