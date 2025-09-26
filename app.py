@@ -35,9 +35,15 @@ hf_api_key_input = st.sidebar.text_input("Hugging Face API Key", type="password"
 
 # Selección de modelos
 st.sidebar.subheader("Selección de Modelos")
+
 model_reasoning = st.sidebar.selectbox(
     "Modelo para Resumen y Razonamiento",
-    ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Llama-2-70b-chat-hf", "google/gemma-7b-it"],
+    [
+        "meta-llama/Meta-Llama-3-8B-Instruct", # <-- AÑADIDO: El modelo al que SÍ tienes acceso
+        "mistralai/Mixtral-8x7B-Instruct-v0.1", # Un modelo abierto que siempre funciona
+        "meta-llama/Llama-2-70b-chat-hf", # Puedes dejarlo por si solicitas acceso en el futuro
+        "google/gemma-7b-it"
+    ],
     help="Modelos grandes son mejores para entender textos complejos."
 )
 model_coding = st.sidebar.selectbox(
