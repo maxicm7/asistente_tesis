@@ -58,7 +58,7 @@ def get_hf_response(api_key, model, prompt):
         return None
 
 # --- Estructura de Pestañas ---
-tab1, tab2, tab3 = st.tabs(["📄 Resumir Paper", "🧠 Razonamiento Económico/Matemático", "💻 Generar Código"])
+tab1, tab2= st.tabs(["📄 Resumir Paper", "🧠 Razonamiento Económico/Matemático"])
 
 # Pestaña 1 y 2 usan el modelo de RAZONAMIENTO
 with tab1:
@@ -81,25 +81,4 @@ with tab2:
             reasoning = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
             if reasoning: st.markdown(reasoning)
 
-# Pestaña 3 usa el modelo de CÓDIGO
-with tab3:
-    st.header("Generador de Código con CODEQwen")
-    code_description = st.text_area(
-        "Describe la tarea de programación que necesitas:", 
-        height=100, 
-        key="code_desc", 
-        value="Me podrías ayudar con un código de python para un modelo de dsge con Quantecon"
-    )
-    if st.button("Generar Código", key="code"):
-        if code_description:
-            with st.spinner("Escribiendo código..."):
-                final_prompt = f"Genera un script en Python para la siguiente tarea:\n\n{code_description}"
-                # ----> USA EL MODELO DE CÓDIGO
-                code = get_hf_response(hf_api_key_input, model_coding, final_prompt)
-                if code:
-                    # Intenta limpiar el código de las explicaciones
-                    if "```python" in code:
-                        code_block = code.split("```python")[1].split("```")[0]
-                    else:
-                        code_block = code # Si no encuentra el bloque, muestra todo
-                    st.code(code_block.strip(), language='python')
+
