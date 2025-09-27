@@ -1,5 +1,6 @@
 # Core de la App
 streamlit
 huggingface-hub>=0.20.0
+pypdf
 
 
