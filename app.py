@@ -1,6 +1,6 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
-import pypdf # Para leer los PDFs
+import pypdf
 import io
 
 # --- 1. Definición del Rol y Configuración Inicial ---
@@ -9,10 +9,6 @@ MASTER_PROMPT = """
 **Nombre del Rol:** Investigador Doctoral IA (IDA)
 **Objetivo Principal:** Asistir en la investigación y redacción de una tesis doctoral.
 **Personalidad:** Eres un asistente de investigación post-doctoral; preciso, metódico y objetivo.
-**Áreas de Especialización:**
-1. **Analista de Literatura Académica:** Resume papers identificando pregunta de investigación, metodología, resultados, contribución y limitaciones.
-2. **Razonador Económico-Matemático:** Explica conceptos, desarrolla derivaciones matemáticas paso a paso e interpreta modelos.
-**Instrucciones de Interacción:** Identifica la tarea, aplica el formato de salida correcto y prioriza la integridad académica.
 [FIN DE LA DEFINICIÓN DEL ROL]
 """
 
@@ -20,19 +16,15 @@ MASTER_PROMPT = """
 def extract_text_from_pdf(pdf_file):
     try:
         pdf_reader = pypdf.PdfReader(io.BytesIO(pdf_file.getvalue()))
-        text = ""
-        for page in pdf_reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+        text = "".join(page.extract_text() for page in pdf_reader.pages if page.extract_text())
         return text
     except Exception as e:
         st.error(f"Error al leer el archivo PDF: {e}")
         return None
 
 # --- Función para llamar a la API de Hugging Face ---
-# <-- ESTA ES LA VERSIÓN CORREGIDA Y MÁS DETALLADA QUE PREFERÍAS -->
-def get_hf_response(api_key, model, prompt):
+# <-- AÑADIMOS EL PARÁMETRO 'temperature' -->
+def get_hf_response(api_key, model, prompt, temperature):
     if not api_key or not api_key.startswith("hf_"):
         st.error("Por favor, introduce una Hugging Face API Key válida en la barra lateral.")
         return None
@@ -40,7 +32,10 @@ def get_hf_response(api_key, model, prompt):
         client = InferenceClient(token=api_key)
         messages = [{"role": "user", "content": prompt}]
         response = client.chat_completion(
-            messages=messages, model=model, max_tokens=4096,
+            messages=messages, 
+            model=model, 
+            max_tokens=4096,
+            temperature=temperature # <-- AQUÍ USAMOS EL PARÁMETRO -->
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -51,7 +46,6 @@ def get_hf_response(api_key, model, prompt):
             "2. El modelo está tardando en cargar en los servidores de Hugging Face. Por favor, espera un minuto y vuelve a intentarlo.\n"
             "3. La API Key es incorrecta o no tiene los permisos necesarios."
         )
-        # Imprime el error completo en la consola del servidor para depuración
         print(f"Detalle del error: {e}") 
         return None
 
@@ -69,11 +63,21 @@ with st.sidebar:
         type="password", 
         value=api_key_value
     )
-    st.sidebar.subheader("Selección de Modelo")
+    st.sidebar.subheader("Parámetros del Modelo")
     model_reasoning = st.sidebar.selectbox(
-        "Modelo para Resumen y Razonamiento",
+        "Selección de Modelo",
         ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct"]
     )
+    # <-- NUEVO: Slider para controlar la temperatura -->
+    temp_slider = st.sidebar.slider(
+        "Temperatura",
+        min_value=0.1,
+        max_value=1.0,
+        value=0.6, # Un buen valor por defecto
+        step=0.1,
+        help="Valores bajos = respuestas más predecibles y factuales. Valores altos = respuestas más creativas."
+    )
+
 
 # --- 3. Lógica Principal con Dos Pestañas ---
 tab1, tab2 = st.tabs(["📄 Resumir Paper", "🧠 Razonamiento Económico/Matemático"])
@@ -98,12 +102,13 @@ with tab1:
         
         if text_to_summarize:
             with st.spinner("Analizando y generando el resumen..."):
-                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Resumir el siguiente texto académico de manera detallada, identificando la pregunta de investigación, metodología, resultados clave, y contribución.\n\n**Texto a Analizar:**\n```\n{text_to_summarize}\n```\n\n**Análisis Detallado:**"
-                summary = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea:** Resumir el siguiente texto académico de manera detallada.\n\n**Texto:**\n{text_to_summarize}"
+                # <-- PASAMOS EL VALOR DEL SLIDER A LA FUNCIÓN -->
+                summary = get_hf_response(hf_api_key_input, model_reasoning, final_prompt, temp_slider)
                 if summary:
                     st.markdown(summary)
         else:
-            st.warning("Por favor, sube un archivo PDF o pega texto en el área designada.")
+            st.warning("Por favor, sube un archivo PDF o pega texto.")
 
 
 # --- Pestaña 2: Razonamiento ---
@@ -113,8 +118,9 @@ with tab2:
     if st.button("Obtener Razonamiento", key="reason"):
         if question_text:
             with st.spinner("Procesando..."):
-                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea Actual:** Responder a una pregunta de economía/matemáticas.\n\n**Pregunta:**\n```\n{question_text}\n```\n\n**Respuesta Detallada:**"
-                reasoning = get_hf_response(hf_api_key_input, model_reasoning, final_prompt)
+                final_prompt = f"{MASTER_PROMPT}\n\n**Tarea:** Responder la siguiente pregunta.\n\n**Pregunta:**\n{question_text}"
+                # <-- PASAMOS EL VALOR DEL SLIDER A LA FUNCIÓN -->
+                reasoning = get_hf_response(hf_api_key_input, model_reasoning, final_prompt, temp_slider)
                 if reasoning:
                     st.markdown(reasoning)
         else:
