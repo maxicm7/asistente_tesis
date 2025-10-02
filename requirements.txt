@@ -1,6 +1,8 @@
-# Core de la App
 streamlit
-huggingface-hub>=0.20.0
+huggingface-hub
 pypdf
-
-
+langchain
+langchain-huggingface
+langchain-community
+faiss-cpu
+sentence-transformers
