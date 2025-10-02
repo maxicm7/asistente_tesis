@@ -1,10 +1,4 @@
 streamlit
-huggingface-hub==0.19.4  # <-- LA LÍNEA CLAVE QUE AÑADIMOS
+huggingface-hub
 pypdf
-langchain==0.2.1
-langchain-community==0.2.1
-langchain-huggingface==0.0.3
-langchain-core==0.2.3
-faiss-cpu
-sentence-transformers
-torch
+
