@@ -3,8 +3,8 @@ import io
 import pypdf
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface.llms import HuggingFaceEndpoint
-from langchain_community.embeddings import SentenceTransformerEmbeddings # <-- CAMBIO CLAVE: Embeddings locales
+from langchain_community.llms import HuggingFaceHub # <-- VERIFICA ESTA LÍNEA
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -41,14 +41,10 @@ def extract_documents_from_pdfs(pdf_files):
             st.error(f"Error leyendo el archivo {pdf_file.name}: {e}")
     return documents
 
-# <-- CAMBIO CLAVE: Esta función ahora crea los embeddings localmente -->
-# Usamos cache_resource para que el modelo de embeddings solo se cargue una vez.
 @st.cache_resource
 def get_embedding_model():
-    # Usamos un modelo eficiente que se ejecuta bien en la CPU de Streamlit
     return SentenceTransformerEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-# <-- CAMBIO CLAVE: La función ya no necesita la API key para los embeddings -->
 def create_vector_db_and_retriever(_pdf_docs, _embedding_model):
     with st.spinner("Procesando documentos: dividiendo, vectorizando y almacenando..."):
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
@@ -59,7 +55,6 @@ def create_vector_db_and_retriever(_pdf_docs, _embedding_model):
             return None
         
         try:
-            # Usamos el modelo de embeddings ya cargado
             vector_db = FAISS.from_documents(chunks, _embedding_model)
             return vector_db.as_retriever()
         except Exception as e:
@@ -78,12 +73,12 @@ with st.sidebar:
         "Hugging Face API Key", 
         type="password", 
         value=api_key_value,
-        help="Necesaria para el modelo de lenguaje (LLM), no para los embeddings."
+        help="Necesaria para el modelo de lenguaje (LLM)."
     )
     st.sidebar.subheader("Parámetros del Modelo LLM")
     model_reasoning = st.sidebar.selectbox(
         "Selección de Modelo LLM",
-        ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct"]
+        ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct", "google/gemma-7b-it"]
     )
     temp_slider = st.sidebar.slider(
         "Temperatura", min_value=0.0, max_value=1.0, value=0.1, step=0.1,
@@ -111,17 +106,16 @@ if uploaded_files:
 if retriever:
     st.success(f"¡Base de conocimiento creada con {len(uploaded_files)} documento(s)! Lista para recibir preguntas.")
     
-    # Validar API Key antes de inicializar el LLM
     if not hf_api_key_input or not hf_api_key_input.startswith("hf_"):
         st.warning("Por favor, introduce una Hugging Face API Key válida en la barra lateral para poder chatear.")
         llm = None
     else:
         try:
-            llm = HuggingFaceEndpoint(
+            # <-- VERIFICA ESTE BLOQUE
+            llm = HuggingFaceHub(
                 repo_id=model_reasoning,
-                max_length=2048,
-                temperature=temp_slider,
-                huggingfacehub_api_token=hf_api_key_input
+                huggingfacehub_api_token=hf_api_key_input,
+                model_kwargs={"temperature": temp_slider, "max_new_tokens": 1024}
             )
         except Exception as e:
             st.error(f"No se pudo inicializar el modelo LLM. Revisa la API Key y la selección de modelo. Error: {e}")
@@ -156,5 +150,7 @@ if retriever:
 
                 except Exception as e:
                     st.error(f"Ocurrió un error al generar la respuesta: {e}")
+                    st.exception(e)
+
 else:
     st.info("Por favor, sube uno o más archivos PDF para comenzar.")
