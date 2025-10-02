@@ -1,8 +1,9 @@
 streamlit
 huggingface-hub
 pypdf
-langchain
-langchain-huggingface  # <-- Esta es la librería que falta
-langchain-community
+langchain==0.2.1
+langchain-community==0.2.1
+langchain-huggingface==0.0.3
+langchain-core==0.2.3
 faiss-cpu
 sentence-transformers
