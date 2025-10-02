@@ -1,11 +1,11 @@
-
+# Reemplaza todo tu bloque de importaciones de LangChain con este
 import streamlit as st
 import io
 import pypdf
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEndpoint
-from langchain_huggingface import HuggingFaceInferenceAPIEmbeddings
+from langchain_huggingface.llms import HuggingFaceEndpoint  # <-- CORREGIDO
+from langchain_huggingface.embeddings import HuggingFaceInferenceAPIEmbeddings # <-- CORREGIDO
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
