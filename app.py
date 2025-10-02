@@ -66,7 +66,7 @@ def create_vector_db_and_retriever(_pdf_docs, api_key):
         try:
             embeddings = HuggingFaceInferenceAPIEmbeddings(
                 api_key=api_key,
-                model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
             # 3. Crear la base de datos vectorial con FAISS y almacenar los chunks
             vector_db = FAISS.from_documents(chunks, embeddings)
