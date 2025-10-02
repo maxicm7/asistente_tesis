@@ -1,5 +1,6 @@
+# requirements.txt - Versión Final con TODAS las dependencias fijadas
 streamlit
-huggingface-hub
+huggingface-hub==0.19.4  # <-- LA LÍNEA CLAVE QUE AÑADIMOS
 pypdf
 langchain==0.2.1
 langchain-community==0.2.1
