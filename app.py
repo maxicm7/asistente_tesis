@@ -1,18 +1,16 @@
-# Reemplaza todo tu bloque de importaciones de LangChain con este
 import streamlit as st
 import io
 import pypdf
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface.llms import HuggingFaceEndpoint  # <-- CORREGIDO
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_huggingface.llms import HuggingFaceEndpoint
+from langchain_community.embeddings import SentenceTransformerEmbeddings # <-- CAMBIO CLAVE: Embeddings locales
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 
 # --- 1. Definición del Rol y Configuración Inicial ---
-# Este prompt ahora es un TEMPLATE que recibirá el contexto recuperado
 RAG_PROMPT_TEMPLATE = """
 [INICIO DE LA DEFINICIÓN DEL ROL]
 **Nombre del Rol:** Investigador Doctoral IA (IDA)
@@ -30,7 +28,6 @@ RAG_PROMPT_TEMPLATE = """
 
 # --- Funciones de la Lógica RAG ---
 
-# Función para extraer texto de los PDFs subidos. Ahora devuelve objetos Document de LangChain.
 def extract_documents_from_pdfs(pdf_files):
     documents = []
     for pdf_file in pdf_files:
@@ -39,52 +36,41 @@ def extract_documents_from_pdfs(pdf_files):
             for i, page in enumerate(pdf_reader.pages):
                 text = page.extract_text()
                 if text:
-                    # Creamos un objeto Document por cada página para mantener la referencia
                     documents.append(Document(page_content=text, metadata={"source": pdf_file.name, "page": i + 1}))
         except Exception as e:
             st.error(f"Error leyendo el archivo {pdf_file.name}: {e}")
     return documents
 
-# Función para crear la base de datos vectorial (Retriever)
-# @st.cache_resource es clave para la eficiencia. No se re-ejecuta si los inputs no cambian.
+# <-- CAMBIO CLAVE: Esta función ahora crea los embeddings localmente -->
+# Usamos cache_resource para que el modelo de embeddings solo se cargue una vez.
 @st.cache_resource
-def create_vector_db_and_retriever(_pdf_docs, api_key):
-    if not api_key or not api_key.startswith("hf_"):
-        st.error("Se necesita una Hugging Face API Key válida para crear los embeddings.")
-        return None
+def get_embedding_model():
+    # Usamos un modelo eficiente que se ejecuta bien en la CPU de Streamlit
+    return SentenceTransformerEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
+# <-- CAMBIO CLAVE: La función ya no necesita la API key para los embeddings -->
+def create_vector_db_and_retriever(_pdf_docs, _embedding_model):
     with st.spinner("Procesando documentos: dividiendo, vectorizando y almacenando..."):
-        # 1. Dividir los documentos en fragmentos (chunks)
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = text_splitter.split_documents(_pdf_docs)
 
         if not chunks:
             st.warning("No se pudo extraer texto de los documentos o los documentos están vacíos.")
             return None
-
-        # 2. Crear los embeddings (vectores) para cada fragmento
+        
         try:
-            embeddings = HuggingFaceInferenceAPIEmbeddings(
-                api_key=api_key,
-                model_name="sentence-transformers/all-MiniLM-L6-v2"
-            )
-            # 3. Crear la base de datos vectorial con FAISS y almacenar los chunks
-            vector_db = FAISS.from_documents(chunks, embeddings)
-
-            # 4. Crear el retriever, que es la interfaz para buscar en la base de datos
-            retriever = vector_db.as_retriever()
-            return retriever
+            # Usamos el modelo de embeddings ya cargado
+            vector_db = FAISS.from_documents(chunks, _embedding_model)
+            return vector_db.as_retriever()
         except Exception as e:
-            st.error(f"Error al crear la base de datos vectorial. ¿La API Key tiene permisos? Detalle: {e}")
+            st.error(f"Ocurrió un error inesperado al crear la base de datos vectorial. Detalle: {e}")
             return None
-
 
 # --- 2. Interfaz de Streamlit ---
 st.set_page_config(layout="wide", page_title="Asistente de Tesis con RAG")
 st.title("🎓 Asistente de Tesis Doctoral (con RAG)")
 st.markdown("Chatea con tu bibliografía. Sube tus papers en PDF y haz preguntas sobre su contenido.")
 
-# --- Configuración en la barra lateral ---
 with st.sidebar:
     st.header("Configuración")
     api_key_value = st.secrets.get("HF_API_KEY", "")
@@ -92,16 +78,16 @@ with st.sidebar:
         "Hugging Face API Key", 
         type="password", 
         value=api_key_value,
-        help="Necesaria para los embeddings y el modelo de lenguaje."
+        help="Necesaria para el modelo de lenguaje (LLM), no para los embeddings."
     )
-    st.sidebar.subheader("Parámetros del Modelo")
+    st.sidebar.subheader("Parámetros del Modelo LLM")
     model_reasoning = st.sidebar.selectbox(
         "Selección de Modelo LLM",
         ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct"]
     )
     temp_slider = st.sidebar.slider(
         "Temperatura", min_value=0.0, max_value=1.0, value=0.1, step=0.1,
-        help="Valores bajos = respuestas más factuales y basadas en el texto. Se recomienda < 0.5 para RAG."
+        help="Valores bajos = respuestas más factuales. Se recomienda < 0.5 para RAG."
     )
     
     st.header("Base de Conocimiento")
@@ -111,50 +97,45 @@ with st.sidebar:
         accept_multiple_files=True
     )
 
-# Inicializar el estado de la sesión
-if "retriever" not in st.session_state:
-    st.session_state.retriever = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # --- 3. Lógica Principal de la App ---
-
-# Solo procesamos si hay archivos subidos
+retriever = None
 if uploaded_files:
-    # Extraer los documentos de los PDFs
     docs = extract_documents_from_pdfs(uploaded_files)
     if docs:
-        # Crear el retriever (la base de conocimiento)
-        # La función está cacheada, así que solo se ejecuta si los archivos cambian
-        st.session_state.retriever = create_vector_db_and_retriever(docs, hf_api_key_input)
+        embedding_model = get_embedding_model()
+        retriever = create_vector_db_and_retriever(docs, embedding_model)
 
-if st.session_state.retriever:
+if retriever:
     st.success(f"¡Base de conocimiento creada con {len(uploaded_files)} documento(s)! Lista para recibir preguntas.")
-
-    # Inicializar el LLM
-    try:
-        llm = HuggingFaceEndpoint(
-            repo_id=model_reasoning,
-            max_length=2048,
-            temperature=temp_slider,
-            huggingfacehub_api_token=hf_api_key_input
-        )
-    except Exception as e:
-        st.error(f"No se pudo inicializar el modelo LLM. Revisa la API Key y la selección de modelo. Error: {e}")
+    
+    # Validar API Key antes de inicializar el LLM
+    if not hf_api_key_input or not hf_api_key_input.startswith("hf_"):
+        st.warning("Por favor, introduce una Hugging Face API Key válida en la barra lateral para poder chatear.")
         llm = None
+    else:
+        try:
+            llm = HuggingFaceEndpoint(
+                repo_id=model_reasoning,
+                max_length=2048,
+                temperature=temp_slider,
+                huggingfacehub_api_token=hf_api_key_input
+            )
+        except Exception as e:
+            st.error(f"No se pudo inicializar el modelo LLM. Revisa la API Key y la selección de modelo. Error: {e}")
+            llm = None
 
     if llm:
-        # Crear la cadena de RAG con LangChain
         prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
         question_answer_chain = create_stuff_documents_chain(llm, prompt)
-        rag_chain = create_retrieval_chain(st.session_state.retriever, question_answer_chain)
+        rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
-        # Mostrar historial del chat
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # Input del usuario
         if user_query := st.chat_input("Haz una pregunta sobre tus documentos..."):
             st.chat_message("user").markdown(user_query)
             st.session_state.chat_history.append({"role": "user", "content": user_query})
@@ -164,10 +145,8 @@ if st.session_state.retriever:
                     response = rag_chain.invoke({"input": user_query})
                     answer = response["answer"]
                     
-                    # Añadir la respuesta del asistente al historial y mostrarla
                     with st.chat_message("assistant"):
                         st.markdown(answer)
-                        # Mostrar las fuentes utilizadas para la respuesta
                         with st.expander("Ver fuentes consultadas"):
                             for doc in response["context"]:
                                 st.write(f"**Fuente:** {doc.metadata.get('source', 'N/A')}, **Página:** {doc.metadata.get('page', 'N/A')}")
