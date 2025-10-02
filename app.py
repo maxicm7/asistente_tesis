@@ -3,7 +3,7 @@ import io
 import pypdf
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.llms import HuggingFaceHub # <-- VERIFICA ESTA LÍNEA
+from langchain_community.llms import HuggingFaceHub
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -81,7 +81,7 @@ with st.sidebar:
         ["mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Meta-Llama-3-8B-Instruct", "google/gemma-7b-it"]
     )
     temp_slider = st.sidebar.slider(
-        "Temperatura", min_value=0.0, max_value=1.0, value=0.1, step=0.1,
+        "Temperatura", min_value=0.01, max_value=1.0, value=0.1, step=0.01,
         help="Valores bajos = respuestas más factuales. Se recomienda < 0.5 para RAG."
     )
     
@@ -106,20 +106,25 @@ if uploaded_files:
 if retriever:
     st.success(f"¡Base de conocimiento creada con {len(uploaded_files)} documento(s)! Lista para recibir preguntas.")
     
+    llm = None
     if not hf_api_key_input or not hf_api_key_input.startswith("hf_"):
         st.warning("Por favor, introduce una Hugging Face API Key válida en la barra lateral para poder chatear.")
-        llm = None
     else:
         try:
-            # <-- VERIFICA ESTE BLOQUE
+            # <-- EL CAMBIO ESTÁ AQUÍ -->
             llm = HuggingFaceHub(
                 repo_id=model_reasoning,
+                task="text-generation",
                 huggingfacehub_api_token=hf_api_key_input,
-                model_kwargs={"temperature": temp_slider, "max_new_tokens": 1024}
+                model_kwargs={
+                    "temperature": temp_slider, 
+                    "max_new_tokens": 1024,
+                    "top_p": 0.95,
+                    "repetition_penalty": 1.03,
+                }
             )
         except Exception as e:
             st.error(f"No se pudo inicializar el modelo LLM. Revisa la API Key y la selección de modelo. Error: {e}")
-            llm = None
 
     if llm:
         prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
